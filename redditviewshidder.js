@@ -11,25 +11,25 @@ function LoadSavedViews(){
 			let iStart = 0;
 			for(let i = 0; i < savedString.length; i++){
 				if(savedString[i] == localStorageSeparator){
-					viewedPostsById.add(savedString.slice(iStart, i-1))
+					viewedPostsById.add(savedString.slice(iStart, i))
 					iStart = i+1;
 				}
 			}
-			//trim size
-			if(viewedPostsById.size > maxStoreCount){
-				let arrToTrim = Array.from(viewedPostsById);
-				arrToTrim.splice(0, viewedPostsById.size - maxStoreCount)
-				viewedPostsById = new Set(arrToTrim);
-			}
 		}catch{
 			console.error("Deserialization error");
+		}
+		//trim size
+		if(viewedPostsById.size > maxStoreCount){
+			let arrToTrim = Array.from(viewedPostsById);
+			arrToTrim.splice(0, viewedPostsById.size - maxStoreCount)
+			viewedPostsById = new Set(arrToTrim);
 		}
 	}
 }
 
 function SaveViews(){
 	let stringToSave = "";
-	for(let viewedId in viewedPostsById)
+	for(let viewedId of viewedPostsById)
 		stringToSave += viewedId + localStorageSeparator
 	localStorage.setItem(localStorageSaveKey, stringToSave);
 }
