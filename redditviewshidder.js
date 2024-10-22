@@ -1,24 +1,37 @@
 let maxStoreCount = 10000;
 let articlesContainer = document.getElementsByTagName('shreddit-feed')[0];
 let localStorageSaveKey = "viewedRedditPosts";
+let localStorageSeparator = ',';
 let viewedPostsById = new Set();
 
 function LoadSavedViews(){
-	let savedJson = localStorage.getItem(localStorageSaveKey);
-	if(savedJson){
-		const arrFromJson = JSON.parse(savedJson);
-		viewedPostsById = new Set(arrFromJson);
-		//trim size
-		if(viewedPostsById.size > maxStoreCount){
-			let arrToTrim = Array.from(viewedPostsById);
-			arrToTrim.splice(0, viewedPostsById.size - maxStoreCount)
-			viewedPostsById = new Set(arrToTrim);
+	let savedString = localStorage.getItem(localStorageSaveKey);
+	if(savedString){
+		try{
+			let iStart = 0;
+			for(let i = 0; i < savedString.length; i++){
+				if(savedString[i] == localStorageSeparator){
+					viewedPostsById.add(savedString.slice(iStart, i-1))
+					iStart = i+1;
+				}
+			}
+			//trim size
+			if(viewedPostsById.size > maxStoreCount){
+				let arrToTrim = Array.from(viewedPostsById);
+				arrToTrim.splice(0, viewedPostsById.size - maxStoreCount)
+				viewedPostsById = new Set(arrToTrim);
+			}
+		}catch{
+			console.error("Deserialization error");
 		}
 	}
 }
 
 function SaveViews(){
-	localStorage.setItem(localStorageSaveKey, JSON.stringify(Array.from(viewedPostsById)));
+	let stringToSave = "";
+	for(let viewedId in viewedPostsById)
+		stringToSave += viewedId + localStorageSeparator
+	localStorage.setItem(localStorageSaveKey, stringToSave);
 }
 
 function ForeachPosts(callback){
