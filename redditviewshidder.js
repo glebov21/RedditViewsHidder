@@ -1,16 +1,28 @@
-let maxStoreCount = 10000;
-let articlesContainer = document.getElementsByTagName('shreddit-feed')[0];
-let localStorageSaveKey = "viewedRedditPosts";
-let localStorageSeparator = ',';
+const articlesContainer = document.getElementsByTagName('shreddit-feed')[0];
+const storageSaveKey = "viewedRedditPosts";
+const storageSeparator = ',';
+
+const oneRecordSizeBytes = 10;
+const browserMaxStoreSizeBytes = 8192;
+const maxStoreCount = browserMaxStoreSizeBytes / (oneRecordSizeBytes + storageSeparator.length) - 2; //(744) -2 Just in case
+
+let thisBrowser = (browser)? browser : chrome;
+if(!thisBrowser)
+	thisBrowser = (window.browser) ? window.browser : window.chrome;
+let storage = thisBrowser.storage.sync;
+
 let viewedPostsById = new Set();
 
-function LoadSavedViews(){
-	let savedString = localStorage.getItem(localStorageSaveKey);
-	if(savedString){
+async function LoadSavedViewsAsync(){
+	console.log("LoadSavedViewsAsync");
+	let obj = await storage.get(storageSaveKey);
+	if(obj && obj.hasOwnProperty(storageSaveKey)){
+		console.log("found saves");
+		savedString = obj[storageSaveKey];
 		try{
 			let iStart = 0;
 			for(let i = 0; i < savedString.length; i++){
-				if(savedString[i] == localStorageSeparator){
+				if(savedString[i] == storageSeparator){
 					viewedPostsById.add(savedString.slice(iStart, i))
 					iStart = i+1;
 				}
@@ -18,20 +30,25 @@ function LoadSavedViews(){
 		}catch{
 			console.error("Deserialization error");
 		}
-		//trim size
-		if(viewedPostsById.size > maxStoreCount){
-			let arrToTrim = Array.from(viewedPostsById);
-			arrToTrim.splice(0, viewedPostsById.size - maxStoreCount)
-			viewedPostsById = new Set(arrToTrim);
-		}
 	}
 }
 
-function SaveViews(){
+async function SaveViewsAsync(){
+	console.log("SaveViewsAsync");
+	//trim size (remove half on max)
+	let arrayOrSetToSave = viewedPostsById;
+	if(viewedPostsById.size > maxStoreCount){
+		arrayOrSetToSave = Array.from(viewedPostsById);
+		arrayOrSetToSave.splice(0, maxStoreCount / 2)
+	}
+
 	let stringToSave = "";
-	for(let viewedId of viewedPostsById)
-		stringToSave += viewedId + localStorageSeparator
-	localStorage.setItem(localStorageSaveKey, stringToSave);
+	for(let viewedId of arrayOrSetToSave)
+		stringToSave += viewedId + storageSeparator;
+
+	var saveObj = {};
+	saveObj[storageSaveKey] = stringToSave;
+	await storage.set(saveObj);
 }
 
 function ForeachPosts(callback){
@@ -52,33 +69,43 @@ function RemoveViewedPosts(){
 	});
 }
 
-//START
-
-LoadSavedViews();
-
-//Hide viewedPosts
-let newpostObserver = new MutationObserver(function(mutations) {
-	mutations.forEach(function(mutation) {
-		if(mutation.addedNodes.length > 0){
-			RemoveViewedPosts();
-		}
+function StartObservers(){
+	console.log("StartObservers");
+	//Hide viewedPosts
+	let newpostObserver = new MutationObserver(function(mutations) {
+		mutations.forEach(function(mutation) {
+			if(mutation.addedNodes.length > 0){
+				RemoveViewedPosts();
+			}
+		});
+	  });
+	
+	newpostObserver.observe(articlesContainer, {childList: true, subtree: true, characterData: false});
+	
+	RemoveViewedPosts();
+	
+	//Catch viewed posts
+	document.addEventListener("scroll", (event) => {
+		ForeachPosts((articleEl, postEl, postId)=>{
+			let bounds = articleEl.getBoundingClientRect();
+			if(bounds.bottom < 0) {
+				viewedPostsById.add(postId);
+			}
+		});
 	});
-  });
-
-newpostObserver.observe(articlesContainer, {childList: true, subtree: true, characterData: false});
-
-RemoveViewedPosts();
-
-//Catch viewed posts
-addEventListener("scroll", (event) => {
-	ForeachPosts((articleEl, postEl, postId)=>{
-		let bounds = articleEl.getBoundingClientRect();
-		if(bounds.bottom < 0) {
-			viewedPostsById.add(postId);
-		}
+	
+	window.addEventListener("beforeunload", (event) => {
+		_ = SaveViewsAsync();
 	});
-});
+}
 
-addEventListener("beforeunload", (event) => {
-	SaveViews();
-});
+if (document.readyState !== 'loading') 
+	Main()
+else 
+	document.addEventListener('DOMContentLoaded', Main);
+	
+async function Main() {
+	console.log("Main");
+	await LoadSavedViewsAsync();
+	StartObservers();
+}
